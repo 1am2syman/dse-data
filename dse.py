@@ -9,16 +9,27 @@ All commands print JSON to stdout (chart prints ASCII). Errors go to stderr, exi
 """
 import argparse
 import datetime as dt
+import hashlib
 import json
 import math
 import os
+import random
 import sys
 import time
+import urllib.error
 import urllib.request
+
+if sys.version_info < (3, 9):
+    sys.exit("error: dse-data requires Python 3.9+ (you have %d.%d)" % sys.version_info[:2])
 
 SKILL_DIR = os.path.dirname(os.path.abspath(__file__))
 SCANNER_URL = "https://scanner.tradingview.com/bangladesh/scan"
 EXCHANGE = "DSEBD"
+__version__ = "1.1.0"
+VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv   # peek: diagnostics before parsing
+NO_CACHE = "--no-cache" in sys.argv
+CACHE_DIR = os.path.join(SKILL_DIR, "cache")
+SCAN_TTL = 60  # seconds: whole-market snapshot responses are effectively frozen for a minute
 
 CORE_COLS = [
     "name", "description", "close", "open", "high", "low", "change", "change_abs",
@@ -83,24 +94,78 @@ def fetch_hist(symbol, interval_enum, bars, attempts=3):
     return None
 
 
+def _log(msg):
+    if VERBOSE:
+        print("[dse] %s" % msg, file=sys.stderr)
+
+
+def cache_get(key, ttl):
+    if NO_CACHE:
+        return None
+    path = os.path.join(CACHE_DIR, key + ".json")
+    try:
+        if time.time() - os.path.getmtime(path) < ttl:
+            _log("cache hit: %s" % key)
+            return open(path).read()
+    except OSError:
+        pass
+    return None
+
+
+def cache_put(key, text):
+    if NO_CACHE:
+        return
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        path = os.path.join(CACHE_DIR, key + ".json")
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            f.write(text)
+        os.replace(tmp, path)  # atomic
+        _log("cache store: %s" % key)
+    except OSError as e:
+        _log("cache write failed (non-fatal): %s" % e)
+
+
+def http_scan(payload, ttl=SCAN_TTL):
+    """POST to the scanner with backoff+jitter, 429 detection, and TTL cache.
+    Returns parsed JSON body; exits(1) with a specific message on failure."""
+    key = "scan_" + hashlib.md5(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
+    cached = cache_get(key, ttl)
+    if cached is not None:
+        return json.loads(cached)
+    data = json.dumps(payload).encode()
+    last_err = None
+    for attempt in range(3):
+        req = urllib.request.Request(
+            SCANNER_URL, data=data,
+            headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                text = r.read().decode()
+                cache_put(key, text)
+                return json.loads(text)
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                sys.exit("error: TradingView rate-limited us (HTTP 429). Wait ~60s, "
+                         "or run fewer calls; snapshot covers the whole market in one request.")
+            last_err = e
+        except Exception as e:
+            last_err = e
+        if attempt < 2:
+            delay = 1.5 * (2 ** attempt) + random.uniform(0, 0.75)
+            _log("retry %d/2 in %.1fs (%s)" % (attempt + 1, delay, last_err))
+            time.sleep(delay)
+    sys.exit("error: scanner request failed after 3 attempts: %s" % last_err)
+
+
 def scan(columns, sort=None, order="desc"):
     payload = {
         "filter": [{"left": "type", "operation": "equal", "right": "stock"}],
         "columns": columns,
         "sort": {"sortBy": sort or "name", "sortOrder": order},
     }
-    req = urllib.request.Request(
-        SCANNER_URL, data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"})
-    last_err = None
-    for _ in range(3):
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                return json.loads(r.read())
-        except Exception as e:  # retry twice
-            last_err = e
-            time.sleep(1.5)
-    sys.exit("error: scanner request failed: %s" % last_err)
+    return http_scan(payload)
 
 
 def scan_rows(columns):
@@ -174,10 +239,7 @@ def cmd_history(args):
 def cmd_index(args):
     cols = ["name", "close", "change", "open", "high", "low"]
     payload = {"symbols": {"tickers": INDEX_TICKERS, "query": {"types": []}}, "columns": cols}
-    req = urllib.request.Request(SCANNER_URL, data=json.dumps(payload).encode(),
-                                 headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        body = json.loads(r.read())
+    body = http_scan(payload, ttl=30)
     out({"as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
          "indices": [dict({"index": t.split(":")[1]},
                           **{cols[i]: (item["d"][i] if i < len(item.get("d", [])) else None)
@@ -243,10 +305,13 @@ def cmd_chart(args):
 
 def main():
     ap = argparse.ArgumentParser(prog="dse.py", description="Dhaka Stock Exchange data (TradingView, keyless)")
+    ap.add_argument("--version", action="version", version="dse-data %s" % __version__)
+    ap.add_argument("--verbose", "-v", action="store_true", help="diagnostics to stderr (retries, cache)")
+    ap.add_argument("--no-cache", action="store_true", help="bypass the %ds scanner cache" % SCAN_TTL)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("snapshot", help="market-wide snapshot JSON")
-    p.add_argument("--top", type=int, help="limit to N results")
+    p.add_argument("--top", type=int, help="limit to N results (1-350)")
     p.add_argument("--by", default="volume",
                    choices=["volume", "gainers", "losers", "marketcap", "rsi", "relvol"])
     p.add_argument("--symbol", help="filter by ticker(s), comma-separated (bare symbols)")
@@ -264,6 +329,10 @@ def main():
 
     sub.add_parser("index", help="DSEX / DSES index values")
     args = ap.parse_args()
+    if hasattr(args, "bars") and not 1 <= args.bars <= 5000:
+        sys.exit("error: --bars must be 1-5000 (got %d)" % args.bars)
+    if hasattr(args, "top") and args.top is not None and not 1 <= args.top <= 350:
+        sys.exit("error: --top must be 1-350 (got %d)" % args.top)
     {"snapshot": cmd_snapshot, "history": cmd_history,
      "chart": cmd_chart, "index": cmd_index}[args.cmd](args)
 

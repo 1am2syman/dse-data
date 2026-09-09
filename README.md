@@ -1,5 +1,7 @@
 # dse-data
 
+[![CI](https://github.com/1am2syman/dse-data/actions/workflows/ci.yml/badge.svg)](https://github.com/1am2syman/dse-data/actions/workflows/ci.yml)
+
 A [pi](https://github.com/badlogic/pi) **agent skill** + CLI for Dhaka Stock Exchange
 (Bangladesh) market data — built for LLM-driven analysis. Everything is **keyless**:
 no API keys, no login, no cost.
@@ -80,6 +82,56 @@ $P $S/scripts/fundamentals.py GP,EBL,SQURPHARMA
 - **Fundamentals for DSE are partial** (e.g. P/E on ~half the board; no beta/debt-ratio).
 - **News:** TradingView doesn't cover DSE meaningfully — use dsebd.org disclosures.
 - **Trading hours:** Sun–Thu, 10:00–14:00 BST.
+
+## Worked examples (actual output)
+
+```console
+$ ./.venv/bin/python dse.py index
+{
+  "as_of": "2026-09-09T07:11:05Z",
+  "indices": [
+    { "index": "DSEX", "close": 5539.32, "change": -0.5, "open": 5567.42, ... },
+    { "index": "DSES", "close": 1109.80, ... }
+  ]
+}
+
+$ ./.venv/bin/python scripts/price.py GP,SQURPHARMA --period 1y
+| ticker | close | period | high | low | returns |
+| GP          | 241.8 | -19.9% | 311.9 | 237.4 | 1w -1.1% · 1m -5.8% · 3m -2.0% · 6m -9.2% |
+| SQURPHARMA | 215.2 |  -2.8% | 236.0 | 198.0 | 1w -0.8% · 1m -2.1% · 3m -0.0% · 6m -4.8% |
+```
+
+## Troubleshooting
+
+| symptom | cause | fix |
+|---|---|---|
+| `venv creation failed` | Debian/Ubuntu without `python3-venv` | `sudo apt install python3-venv python3-full`, re-run `./setup.sh` |
+| `requires Python 3.9+` | old interpreter | install a newer python; or `PYTHON=python3.11 ./setup.sh` |
+| `scanner request failed after 3 attempts` | no internet / TradingView blocked on your network | check connectivity; some corporate networks block it — try a different network |
+| `HTTP 429` message | rate-limited | wait ~60s. snapshot covers the whole market in **one** call — don't loop per symbol |
+| Empty / stale data outside Sun–Thu 10:00–14:00 BST | market closed | expected: last session's data is returned |
+| `error: no data for X` | wrong ticker | use the bare DSE code (`GP`, not `DSEBD:GP` or `Grameenphone`) |
+| Fresh install but `tvdatafeed-enhanced missing` | venv half-created | `rm -rf .venv && ./setup.sh` |
+| Odd results after a corporate action | split-adjusted series restated | re-pull history (expected behavior) |
+
+## Using the skill from other harnesses
+
+The skill is plain files — pi loads it from `~/.pi/agent/skills/`, but any Agent-Skills-
+compatible harness (Claude Code, Codex, …) can use it. In pi you can also add it to
+`.pi/settings.json` from an arbitrary path:
+
+```json
+{ "skills": ["~/GitHub/dse-data"] }
+```
+
+## Tests
+
+```bash
+python3 -m unittest discover -s tests -p "test_offline.py" -v   # offline, no deps
+bash tests/smoke_live.sh                                          # live data (needs internet)
+```
+
+CI (GitHub Actions) runs the offline suite on Python 3.9 and 3.12 for every push.
 
 ## Disclaimer
 

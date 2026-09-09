@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Offline unit tests (no network, no deps)
+        run: python -m unittest discover -s tests -p "test_offline.py" -v
+      - name: CLI guard checks
+        run: |
+          python dse.py --version
+          python dse.py history GP --bars 99999 2>&1 | grep -q "1-5000" || exit 1
+          echo "guards OK"

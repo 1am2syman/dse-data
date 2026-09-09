@@ -22,8 +22,12 @@ If the venv is missing (fresh clone), run once:
 cd ~/.pi/agent/skills/dse-data && ./setup.sh
 ```
 
-`setup.sh` creates `.venv` and installs `tvdatafeed-enhanced` + `websocket-client`
-(`websocket-client` must be explicit — the library needs it but doesn't declare it).
+`setup.sh` creates `.venv` and installs the pinned dependency set
+(`requirements-lock.txt`). (`websocket-client` is listed explicitly — the library
+needs it but doesn't declare it.)
+
+Runtime flags (any command): `--version` · `--verbose` (retries/cache to stderr) ·
+`--no-cache` (bypass the 60s snapshot cache).
 
 ## Commands
 
@@ -115,3 +119,5 @@ $P $S/scripts/backfill.py --symbols GP,SQURPHARMA --interval 1D --bars 1200 --ou
 6. Context discipline: use `scripts/price.py`, `technicals.py`, `fundamentals.py` for
    ticker-specific questions (compact tables); reserve `snapshot --full` for whole-market
    scans and raw `history` for when you truly need every bar.
+7. Reference docs live in the repo: `docs/FIELDS.md` (every field, unit, and DSE coverage)
+   and `docs/CONTRACT.md` (JSON shapes, exit codes, caching, retry behavior).

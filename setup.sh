@@ -12,6 +12,11 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)'; then
+  echo "ERROR: dse-data requires Python 3.9+ (found $($PYTHON --version 2>&1))." >&2
+  exit 1
+fi
+
 # 1 · venv
 if [ ! -x .venv/bin/python ]; then
   echo "==> creating .venv"
@@ -22,10 +27,11 @@ if [ ! -x .venv/bin/python ]; then
   }
 fi
 
-# 2 · dependencies
-echo "==> installing dependencies (tvdatafeed-enhanced, websocket-client, pandas)"
+# 2 · dependencies (prefer the pinned lockfile for reproducible installs)
+echo "==> installing dependencies (pinned)"
 ./.venv/bin/python -m pip install --quiet --disable-pip-version-check --upgrade pip
-./.venv/bin/pip install --quiet --disable-pip-version-check -r requirements.txt
+REQ=requirements-lock.txt; [ -f "$REQ" ] || REQ=requirements.txt
+./.venv/bin/pip install --quiet --disable-pip-version-check -r "$REQ"
 # tvdatafeed-enhanced imports `websocket` but doesn't declare it — keep explicit:
 ./.venv/bin/python -c "import websocket" 2>/dev/null || \
   ./.venv/bin/pip install --quiet --disable-pip-version-check websocket-client

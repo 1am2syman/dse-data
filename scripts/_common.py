@@ -30,9 +30,15 @@ def parse_symbols(raw):
 
 
 def resolve_bars(period, bars):
-    if bars:
+    """Validate inputs and return the bar count. Exits with a clean error on bad input."""
+    if bars is not None:
+        if not 1 <= bars <= 5000:
+            sys.exit("error: --bars must be 1-5000 (got %d)" % bars)
         return bars
-    return PERIOD_BARS.get((period or "1y").lower(), 252)
+    p = (period or "1y").lower()
+    if p not in PERIOD_BARS:
+        sys.exit("error: --period must be one of %s (got %r)" % (", ".join(PERIOD_BARS), period))
+    return PERIOD_BARS[p]
 
 
 def md_table(header, rows, aligns=None):
