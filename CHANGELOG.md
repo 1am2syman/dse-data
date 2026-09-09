@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1 — 2026-09-09
+
+**Fixed**
+- `history`/`chart` validated `--interval` *after* the venv bootstrap, so on a machine
+  without `.venv` a bad interval reported a misleading dependency error. Input
+  validation now always precedes environment checks. (Caught by CI on the first run.)
+
 ## 1.1.0 — 2026-09-09
 
 Robustness + documentation release.
