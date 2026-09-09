@@ -214,13 +214,13 @@ def cmd_snapshot(args):
 
 
 def cmd_history(args):
-    ensure_venv()
-    from tvDatafeed import Interval
     intervals = {"1m": "in_1_minute", "5m": "in_5_minute", "15m": "in_15_minute",
                  "30m": "in_30_minute", "1h": "in_1_hour", "2h": "in_2_hour",
                  "4h": "in_4_hour", "1D": "in_daily", "1W": "in_weekly", "1M": "in_monthly"}
     if args.interval not in intervals:
         sys.exit("error: interval must be one of %s" % ", ".join(intervals))
+    ensure_venv()
+    from tvDatafeed import Interval
     df = fetch_hist(args.symbol.upper(), getattr(Interval, intervals[args.interval]), args.bars)
     if df is None:
         sys.exit("error: no data for %s (check ticker; use bare symbol like GP or SQURPHARMA)" % args.symbol)
@@ -286,12 +286,12 @@ def render_chart(dates, closes, title):
 
 
 def cmd_chart(args):
-    ensure_venv()
-    from tvDatafeed import Interval
     intervals = {"1m": "in_1_minute", "5m": "in_5_minute", "15m": "in_15_minute",
                  "30m": "in_30_minute", "1h": "in_1_hour", "1D": "in_daily", "1W": "in_weekly"}
     if args.interval not in intervals:
         sys.exit("error: chart interval must be one of %s" % ", ".join(intervals))
+    ensure_venv()
+    from tvDatafeed import Interval
     df = fetch_hist(args.symbol.upper(), getattr(Interval, intervals[args.interval]), args.bars)
     if df is None:
         sys.exit("error: no data for %s" % args.symbol)
