@@ -6,6 +6,7 @@ Examples:
     price.py GP --period 6m --series             # + downsampled OHLCV series
     price.py GP,BRACBANK --period 1y --format json
 """
+import argparse
 import datetime as dt
 import sys
 
@@ -14,8 +15,6 @@ import dse
 
 
 def main():
-    ap = C.dse and None
-    import argparse
     ap = argparse.ArgumentParser(description="price history for DSE tickers (context-lean)")
     ap.add_argument("symbols", help="comma-separated bare tickers, e.g. GP,SQURPHARMA")
     ap.add_argument("--period", default="1y", help="1w 2w 1m 3m 6m 1y 2y 3y 5y max (default 1y)")

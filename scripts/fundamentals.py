@@ -10,6 +10,7 @@ Examples:
     fundamentals.py BRACBANK --format json
 """
 import datetime as dt
+import sys
 
 import _common as C
 import dse
