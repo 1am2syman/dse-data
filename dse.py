@@ -25,7 +25,7 @@ if sys.version_info < (3, 9):
 SKILL_DIR = os.path.dirname(os.path.abspath(__file__))
 SCANNER_URL = "https://scanner.tradingview.com/bangladesh/scan"
 EXCHANGE = "DSEBD"
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv   # peek: diagnostics before parsing
 NO_CACHE = "--no-cache" in sys.argv
 CACHE_DIR = os.path.join(SKILL_DIR, "cache")

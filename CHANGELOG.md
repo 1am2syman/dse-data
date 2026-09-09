@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.2 — 2026-09-09
+
+**Fixed**
+- `setup.sh` died with `No module named pip` on distros where `python3 -m venv`
+  exits 0 but ships no pip/ensurepip (Ubuntu without `python3-venv`). It now
+  detects a pip-less venv and bootstraps pip (ensurepip, then a `get-pip.py`
+  fallback) before installing dependencies. Regression-tested offline by
+  simulating a `--without-pip` venv in `tests/test_offline.py`.
+
 ## 1.1.1 — 2026-09-09
 
 **Fixed**

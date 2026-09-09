@@ -20,11 +20,23 @@ fi
 # 1 · venv
 if [ ! -x .venv/bin/python ]; then
   echo "==> creating .venv"
-  "$PYTHON" -m venv .venv 2>/dev/null || {
-    # some distros ship venv without ensurepip; try bootstrapping
-    "$PYTHON" -m venv .venv --without-pip && ./.venv/bin/python -m ensurepip --upgrade >/dev/null 2>&1 \
-      || { echo "ERROR: venv creation failed. On Debian/Ubuntu: sudo apt install python3-venv python3-full" >&2; exit 1; }
+  "$PYTHON" -m venv .venv || {
+    echo "ERROR: venv creation failed. On Debian/Ubuntu: sudo apt install python3-venv python3-full" >&2
+    exit 1
   }
+fi
+
+# Some distros (Ubuntu without python3-venv) create a venv that exits 0 but has
+# neither pip nor ensurepip — detect and bootstrap before the dependency step.
+if ! ./.venv/bin/python -m pip --version >/dev/null 2>&1; then
+  echo "==> venv has no pip — bootstrapping"
+  if ! ./.venv/bin/python -m ensurepip --upgrade >/dev/null 2>&1; then
+    echo "==> ensurepip unavailable — falling back to get-pip.py"
+    GETPIP="$(mktemp -d)/get-pip.py"
+    curl -fsSL https://bootstrap.pypa.io/get-pip.py -o "$GETPIP" \
+      && ./.venv/bin/python "$GETPIP" >/dev/null 2>&1 \
+      || { echo "ERROR: could not bootstrap pip into the venv. On Debian/Ubuntu: sudo apt install python3-venv python3-full, then rerun ./setup.sh" >&2; exit 1; }
+  fi
 fi
 
 # 2 · dependencies (prefer the pinned lockfile for reproducible installs)

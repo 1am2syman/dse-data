@@ -5,8 +5,10 @@ Run from anywhere:  python3 -m unittest discover -s tests -p "test_offline.py" -
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -103,6 +105,97 @@ class TestCliGuardsOffline(unittest.TestCase):
         r = self.run_cli("--version")
         self.assertEqual(r.returncode, 0)
         self.assertIn(dse.__version__, r.stdout)
+
+
+class TestSetupScriptPipBootstrap(unittest.TestCase):
+    """setup.sh must bootstrap pip into a venv that was created without it.
+
+    Ubuntu without python3-venv: `python3 -m venv` exits 0 but the venv has no
+    pip and no ensurepip, so the dependency install died with 'No module named
+    pip'. The fix detects a pip-less venv and bootstraps pip (ensurepip, then
+    get-pip.py). This test simulates the broken distro state deterministically
+    with `--without-pip` and stays offline: requirements are replaced with a
+    comment-only file so the dependency install is a no-op (only the bootstrap
+    is under test; the real smoke test fails harmlessly without pandas).
+    """
+
+    def test_bootstraps_pip_into_pipless_venv(self):
+        # venv module itself must be available to simulate the broken state
+        probe = subprocess.run([sys.executable, "-m", "venv", "--help"],
+                               capture_output=True)
+        if probe.returncode != 0:
+            self.skipTest("venv module unavailable")
+
+        with tempfile.TemporaryDirectory() as td:
+            scratch = os.path.join(td, "repo")
+            os.makedirs(scratch)
+            SKIP = {".venv", ".git", ".github", "cache", "data", "__pycache__"}
+            for name in os.listdir(REPO):
+                if name in SKIP:
+                    continue
+                src = os.path.join(REPO, name)
+                dst = os.path.join(scratch, name)
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst)
+                else:
+                    shutil.copy2(src, dst)
+
+            # Simulate the broken distro: venv that "succeeded" without pip
+            subprocess.run([sys.executable, "-m", "venv", "--without-pip",
+                            os.path.join(scratch, ".venv")], check=True)
+            self.assertFalse(os.path.exists(os.path.join(scratch, ".venv", "bin", "pip")))
+
+            # Keep the test offline: comment-only requirements = no-op install
+            note = "# deps intentionally omitted: this test exercises pip bootstrap only\n"
+            for req in ("requirements.txt", "requirements-lock.txt"):
+                with open(os.path.join(scratch, req), "w") as f:
+                    f.write(note)
+
+            r = subprocess.run(["bash", os.path.join(scratch, "setup.sh")],
+                               capture_output=True, text=True, timeout=120,
+                               env={**os.environ, "PYTHON": sys.executable})
+            self.assertEqual(
+                r.returncode, 0,
+                "setup.sh failed on a pip-less venv:\n" + r.stdout + r.stderr)
+
+            q = subprocess.run([os.path.join(scratch, ".venv", "bin", "python"),
+                                "-m", "pip", "--version"],
+                               capture_output=True, text=True, timeout=30)
+            self.assertEqual(q.returncode, 0,
+                             "pip still missing after setup.sh:\n" + q.stderr)
+
+    def test_existing_healthy_venv_untouched(self):
+        """Regression guard: a venv that already has pip must not be recreated."""
+        with tempfile.TemporaryDirectory() as td:
+            scratch = os.path.join(td, "repo")
+            os.makedirs(scratch)
+            SKIP = {".venv", ".git", ".github", "cache", "data", "__pycache__"}
+            for name in os.listdir(REPO):
+                if name in SKIP:
+                    continue
+                src = os.path.join(REPO, name)
+                dst = os.path.join(scratch, name)
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst)
+                else:
+                    shutil.copy2(src, dst)
+
+            subprocess.run([sys.executable, "-m", "venv",
+                            os.path.join(scratch, ".venv")], check=True)
+            marker = os.path.join(scratch, ".venv", "bin", "pip")
+            self.assertTrue(os.path.exists(marker))
+
+            note = "# deps intentionally omitted\n"
+            for req in ("requirements.txt", "requirements-lock.txt"):
+                with open(os.path.join(scratch, req), "w") as f:
+                    f.write(note)
+
+            r = subprocess.run(["bash", os.path.join(scratch, "setup.sh")],
+                               capture_output=True, text=True, timeout=120,
+                               env={**os.environ, "PYTHON": sys.executable})
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertTrue(os.path.exists(marker),
+                            "setup.sh recreated a venv that already had pip")
 
 
 if __name__ == "__main__":
