@@ -14,7 +14,11 @@ no API keys, no login, no cost.
     split-adjusted, years deep)
   - `chart` — labeled ASCII charts
   - `index` — DSEX / DSES levels
-- `scripts/backfill.py` — bulk-download daily history for a list of symbols into `data/`
+- `scripts/` — context-lean helper tools (markdown tables by default, JSON/CSV on demand):
+  - `price.py` — price history by period (`--period 1y`) with pre-computed returns, optional downsampled series
+  - `technicals.py` — current TradingView indicators per ticker + plain-words read (one call for any number of tickers)
+  - `fundamentals.py` — fundamentals table per ticker (nulls dropped — DSE coverage is partial upstream)
+  - `backfill.py` — bulk-download history into `data/`
 
 ## Install (one command, on any pi machine)
 
@@ -57,6 +61,14 @@ Bulk backfill:
 P=~/.pi/agent/skills/dse-data/.venv/bin/python
 S=~/.pi/agent/skills/dse-data
 $P $S/scripts/backfill.py --symbols GP,SQURPHARMA,BRACBANK --interval 1D --bars 1200 --out data/
+```
+
+Context-lean helpers (prefer these when studying specific tickers):
+
+```bash
+$P $S/scripts/price.py GP,SQURPHARMA --period 1y
+$P $S/scripts/technicals.py GP,BRACBANK,SHAHJABANK
+$P $S/scripts/fundamentals.py GP,EBL,SQURPHARMA
 ```
 
 ## Data sources & caveats

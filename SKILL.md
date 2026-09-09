@@ -50,12 +50,28 @@ $D index                             # DSEX and DSES levels
 $D snapshot --symbol GP,BATBC --full | jq '.stocks'
 ```
 
-Helper scripts (`scripts/`, run with the skill's venv python):
+Helper scripts (`scripts/`, run with the skill's venv python) — **prefer these over raw
+`snapshot --full` / `history` dumps when studying specific tickers**: same answer,
+~50× fewer tokens. All take comma-separated tickers and human periods, one network
+call wherever possible:
 
 ```bash
 P=~/.pi/agent/skills/dse-data/.venv/bin/python
 S=~/.pi/agent/skills/dse-data
 
+$P $S/scripts/price.py GP,SQURPHARMA                     # 1y price summary (md table)
+$P $S/scripts/price.py GP --period 6m --series           # + downsampled OHLCV (≤60 rows)
+$P $S/scripts/technicals.py GP,BRACBANK,SHAHJABANK       # current indicators + plain-words read
+$P $S/scripts/fundamentals.py GP,EBL,SQURPHARMA          # fundamentals table
+```
+
+Notes: `--format json|csv` switches output; `--period` accepts 1w/2w/1m/3m/6m/1y/2y/3y/5y/max;
+`technicals.py --raw` adds every raw indicator field. Period returns (1w/1m/3m/6m) are
+pre-computed in price.py so the agent doesn't recompute from raw bars.
+
+Bulk download:
+
+```bash
 $P $S/scripts/backfill.py --symbols GP,SQURPHARMA --interval 1D --bars 1200 --out data/
 ```
 
@@ -96,3 +112,6 @@ $P $S/scripts/backfill.py --symbols GP,SQURPHARMA --interval 1D --bars 1200 --ou
 4. Use `chart` when you (or the user) want a visual sanity check in the terminal.
 5. Cite the vintage: output JSON includes `as_of` timestamps — quote them when
    presenting analysis.
+6. Context discipline: use `scripts/price.py`, `technicals.py`, `fundamentals.py` for
+   ticker-specific questions (compact tables); reserve `snapshot --full` for whole-market
+   scans and raw `history` for when you truly need every bar.
